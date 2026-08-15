@@ -1,0 +1,18 @@
+{
+  "name": "floatypus",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FLOATYPUS ($FLOATY) static community website.",
+  "type": "module",
+  "scripts": {
+    "dev": "serve .",
+    "build": "node scripts/build.mjs",
+    "preview": "serve dist"
+  },
+  "devDependencies": {
+    "serve": "^14.2.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
