@@ -3,7 +3,7 @@ const FLOAT_CONFIG = {
   name: "FLOATYPUS",
   ticker: "$FLOATY",
   address: "0xXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-  chain: "TBD",
+  chain: "Robinhood Chain",
   supply: "TBD",
   liquidity: "TBD",
   tax: "0%",
