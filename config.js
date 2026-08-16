@@ -3,6 +3,7 @@ const FLOAT_CONFIG = {
   name: "FLOATYPUS",
   ticker: "$FLOATY",
   address: "0x09389508d005f3fd52d5af84dd74be9041e1f78f",
+  pool: "0x219dD2e1a859e7b8A24cEFeBEA5AdabE1e685A3a",
   chain: "Robinhood Chain",
   supply: "TBD",
   liquidity: "TBD",
