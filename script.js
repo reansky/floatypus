@@ -192,7 +192,274 @@ async function readERC20Data() {
   }
 }
 
-readERC20Data();
+readERC20Data();// ============================================================
+// SUSHISWAP V3 LIQUIDITY - FLOATY
+// ============================================================
+
+const FLOATY_POOL = FLOAT_CONFIG.pool;
+
+const V3_SELECTORS = {
+  token0: "0x0dfe1681",
+  token1: "0xd21220a7",
+  balanceOf: "0x70a08231"
+};
+
+function decodeAddressResult(hex) {
+  return "0x" + hex.replace(/^0x/, "").slice(-40);
+}
+
+function decodeUintResult(hex) {
+  return BigInt(hex);
+}
+
+function formatPoolAmount(raw, decimals) {
+  const value = BigInt(raw);
+  const divisor = 10n ** BigInt(decimals);
+
+  const whole = value / divisor;
+  const fraction = value % divisor;
+
+  if (fraction === 0n) {
+    return whole.toString();
+  }
+
+  return (
+    whole.toString() +
+    "." +
+    fraction
+      .toString()
+      .padStart(decimals, "0")
+      .replace(/0+$/, "")
+  );
+}
+
+function formatLiquidityNumber(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) return value;
+
+  if (number >= 1_000_000_000) {
+    return `${(number / 1_000_000_000).toFixed(2).replace(/\.00$/, "")}B`;
+  }
+
+  if (number >= 1_000_000) {
+    return `${(number / 1_000_000).toFixed(2).replace(/\.00$/, "")}M`;
+  }
+
+  if (number >= 1_000) {
+    return `${(number / 1_000).toFixed(2).replace(/\.00$/, "")}K`;
+  }
+
+  return number.toLocaleString(undefined, {
+    maximumFractionDigits: 4
+  });
+}
+
+async function readLiquidity() {
+  if (!FLOATY_POOL) {
+    console.warn("FLOATY pool address is missing.");
+    return;
+  }
+
+  try {
+    // Get pool token0 and token1
+    const [token0Raw, token1Raw] = await Promise.all([
+      rpcCall("eth_call", [
+        {
+          to: FLOATY_POOL,
+          data: V3_SELECTORS.token0
+        },
+        "latest"
+      ]),
+
+      rpcCall("eth_call", [
+        {
+          to: FLOATY_POOL,
+          data: V3_SELECTORS.token1
+        },
+        "latest"
+      ])
+    ]);
+
+    const token0 = decodeAddressResult(token0Raw);
+    const token1 = decodeAddressResult(token1Raw);
+
+    // Read decimals + symbol for both tokens
+    const [
+      token0DecimalsRaw,
+      token1DecimalsRaw,
+      token0SymbolRaw,
+      token1SymbolRaw
+    ] = await Promise.all([
+      rpcCall("eth_call", [
+        {
+          to: token0,
+          data: ERC20_ABI.decimals
+        },
+        "latest"
+      ]),
+
+      rpcCall("eth_call", [
+        {
+          to: token1,
+          data: ERC20_ABI.decimals
+        },
+        "latest"
+      ]),
+
+      rpcCall("eth_call", [
+        {
+          to: token0,
+          data: ERC20_ABI.symbol
+        },
+        "latest"
+      ]),
+
+      rpcCall("eth_call", [
+        {
+          to: token1,
+          data: ERC20_ABI.symbol
+        },
+        "latest"
+      ])
+    ]);
+
+    const token0Decimals = Number(
+      decodeUintResult(token0DecimalsRaw)
+    );
+
+    const token1Decimals = Number(
+      decodeUintResult(token1DecimalsRaw)
+    );
+
+    const decodeSymbol = (hex) => {
+      const clean = hex.replace(/^0x/, "");
+
+      try {
+        if (clean.length >= 128) {
+          const offset =
+            parseInt(clean.slice(0, 64), 16) * 2;
+
+          const length =
+            parseInt(
+              clean.slice(offset, offset + 64),
+              16
+            );
+
+          const bytes =
+            clean.slice(
+              offset + 64,
+              offset + 64 + length * 2
+            );
+
+          return decodeURIComponent(
+            bytes.replace(/(..)/g, "%$1")
+          ).replace(/\0/g, "").trim();
+        }
+
+        return clean
+          .match(/.{2}/g)
+          ?.map((byte) =>
+            String.fromCharCode(
+              parseInt(byte, 16)
+            )
+          )
+          .join("")
+          .replace(/\0/g, "")
+          .trim() || "";
+      } catch {
+        return "";
+      }
+    };
+
+    const symbol0 = decodeSymbol(token0SymbolRaw) || "TOKEN";
+    const symbol1 = decodeSymbol(token1SymbolRaw) || "TOKEN";
+
+    // Pool address padded for balanceOf(address)
+    const poolArgument = FLOATY_POOL
+      .toLowerCase()
+      .replace(/^0x/, "")
+      .padStart(64, "0");
+
+    // Read actual ERC-20 balances held by the SushiSwap V3 pool
+    const [balance0Raw, balance1Raw] = await Promise.all([
+      rpcCall("eth_call", [
+        {
+          to: token0,
+          data: V3_SELECTORS.balanceOf + poolArgument
+        },
+        "latest"
+      ]),
+
+      rpcCall("eth_call", [
+        {
+          to: token1,
+          data: V3_SELECTORS.balanceOf + poolArgument
+        },
+        "latest"
+      ])
+    ]);
+
+    const balance0 = formatPoolAmount(
+      balance0Raw,
+      token0Decimals
+    );
+
+    const balance1 = formatPoolAmount(
+      balance1Raw,
+      token1Decimals
+    );
+
+    // Put FLOATY first
+    let liquidityText;
+
+    if (
+      token0.toLowerCase() ===
+      FLOATY_ADDRESS.toLowerCase()
+    ) {
+      liquidityText =
+        `${formatLiquidityNumber(balance0)} ${symbol0} / ${formatLiquidityNumber(balance1)} ${symbol1}`;
+    } else if (
+      token1.toLowerCase() ===
+      FLOATY_ADDRESS.toLowerCase()
+    ) {
+      liquidityText =
+        `${formatLiquidityNumber(balance1)} ${symbol1} / ${formatLiquidityNumber(balance0)} ${symbol0}`;
+    } else {
+      liquidityText =
+        `${formatLiquidityNumber(balance0)} ${symbol0} / ${formatLiquidityNumber(balance1)} ${symbol1}`;
+    }
+
+    // Update ONLY the Liquidity card
+    document
+      .querySelectorAll('[data-config="liquidity"]')
+      .forEach((element) => {
+        element.textContent = liquidityText;
+      });
+
+    console.log("FLOATY SushiSwap V3 pool:", {
+      pool: FLOATY_POOL,
+      token0,
+      token1,
+      balance0,
+      balance1,
+      liquidityText
+    });
+
+  } catch (error) {
+    console.error(
+      "Failed to read FLOATY SushiSwap V3 liquidity:",
+      error
+    );
+
+    // Do NOT break the website if liquidity fails.
+  }
+}
+
+readLiquidity();
+
+// Refresh liquidity every 60 seconds
+setInterval(readLiquidity, 60_000);
 document.querySelectorAll("[data-social='x'], [data-social-link='x']").forEach((link) => { link.href = FLOAT_CONFIG.links.x; });
 
 const showToast = (message) => {
