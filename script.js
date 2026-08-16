@@ -53,7 +53,146 @@ const updateMemes = () => memeImages.forEach((image) => {
 });
 window.addEventListener("scroll", updateMemes, { passive: true });
 updateMemes();
-document.querySelectorAll("[data-config]").forEach((element) => { element.textContent = FLOAT_CONFIG[element.dataset.config] ?? element.textContent; });
+const ROBINHOOD_RPC = "https://rpc.mainnet.chain.robinhood.com";
+const FLOATY_ADDRESS = FLOAT_CONFIG.address;
+
+const ERC20_ABI = {
+  name: "0x06fdde03",
+  symbol: "0x95d89b41",
+  decimals: "0x313ce567",
+  totalSupply: "0x18160ddd"
+};
+
+async function rpcCall(method, params = []) {
+  const response = await fetch(ROBINHOOD_RPC, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params
+    })
+  });
+
+  const data = await response.json();
+
+  if (data.error) {
+    throw new Error(data.error.message);
+  }
+
+  return data.result;
+}
+
+async function readERC20Data() {
+  try {
+    const calls = await Promise.all([
+      rpcCall("eth_call", [{ to: FLOATY_ADDRESS, data: ERC20_ABI.name }, "latest"]),
+      rpcCall("eth_call", [{ to: FLOATY_ADDRESS, data: ERC20_ABI.symbol }, "latest"]),
+      rpcCall("eth_call", [{ to: FLOATY_ADDRESS, data: ERC20_ABI.decimals }, "latest"]),
+      rpcCall("eth_call", [{ to: FLOATY_ADDRESS, data: ERC20_ABI.totalSupply }, "latest"])
+    ]);
+
+    const decodeString = (hex) => {
+      const clean = hex.replace(/^0x/, "");
+
+      // Standard ABI dynamic string
+      if (clean.length >= 128) {
+        const offset = parseInt(clean.slice(0, 64), 16) * 2;
+        const length = parseInt(clean.slice(offset, offset + 64), 16);
+        const bytes = clean.slice(offset + 64, offset + 64 + length * 2);
+
+        return decodeURIComponent(
+          bytes.replace(/(..)/g, "%$1")
+        );
+      }
+
+      // bytes32 fallback
+      return clean
+        .match(/.{2}/g)
+        ?.map((byte) => String.fromCharCode(parseInt(byte, 16)))
+        .join("")
+        .replace(/\0/g, "")
+        .trim() || "";
+    };
+
+    const name = decodeString(calls[0]);
+    const symbol = decodeString(calls[1]);
+
+    const decimals = parseInt(calls[2], 16);
+    const totalSupplyRaw = BigInt(calls[3]);
+
+    const divisor = 10n ** BigInt(decimals);
+    const whole = totalSupplyRaw / divisor;
+    const fraction = totalSupplyRaw % divisor;
+
+    let supply = whole.toString();
+
+    if (fraction > 0n) {
+      const fractionText = fraction
+        .toString()
+        .padStart(decimals, "0")
+        .replace(/0+$/, "");
+
+      supply += "." + fractionText;
+    }
+
+    // Format large numbers
+    const supplyNumber = Number(supply);
+
+    let formattedSupply;
+
+    if (Number.isFinite(supplyNumber)) {
+      if (supplyNumber >= 1_000_000_000) {
+        formattedSupply = `${(supplyNumber / 1_000_000_000).toFixed(2).replace(/\.00$/, "")}B`;
+      } else if (supplyNumber >= 1_000_000) {
+        formattedSupply = `${(supplyNumber / 1_000_000).toFixed(2).replace(/\.00$/, "")}M`;
+      } else if (supplyNumber >= 1_000) {
+        formattedSupply = `${(supplyNumber / 1_000).toFixed(2).replace(/\.00$/, "")}K`;
+      } else {
+        formattedSupply = supply;
+      }
+    } else {
+      formattedSupply = supply;
+    }
+
+    document.querySelectorAll("[data-config]").forEach((element) => {
+      const key = element.dataset.config;
+
+      if (key === "name") {
+        element.textContent = name || FLOAT_CONFIG.name;
+      } else if (key === "ticker") {
+        element.textContent = symbol ? `$${symbol.replace(/^\$/, "")}` : FLOAT_CONFIG.ticker;
+      } else if (key === "supply") {
+        element.textContent = formattedSupply;
+      } else if (key === "chain") {
+        element.textContent = "Robinhood Chain";
+      } else {
+        element.textContent = FLOAT_CONFIG[key] ?? element.textContent;
+      }
+    });
+
+    console.log("FLOATY on-chain data:", {
+      name,
+      symbol,
+      decimals,
+      supply
+    });
+
+  } catch (error) {
+    console.error("Failed to read FLOATY from Robinhood Chain:", error);
+
+    // Fallback ke config.js jika RPC gagal
+    document.querySelectorAll("[data-config]").forEach((element) => {
+      element.textContent =
+        FLOAT_CONFIG[element.dataset.config] ?? element.textContent;
+    });
+  }
+}
+
+readERC20Data();
 document.querySelectorAll("[data-social='x'], [data-social-link='x']").forEach((link) => { link.href = FLOAT_CONFIG.links.x; });
 
 const showToast = (message) => {
