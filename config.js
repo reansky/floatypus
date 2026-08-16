@@ -2,7 +2,7 @@ const FLOAT_CONFIG = {
   // Edit this file when you publish the token or update the project links.
   name: "FLOATYPUS",
   ticker: "$FLOATY",
-  address: "0xXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  address: "0x09389508d005f3fd52d5af84dd74be9041e1f78f",
   chain: "Robinhood Chain",
   supply: "TBD",
   liquidity: "TBD",
