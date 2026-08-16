@@ -14,7 +14,7 @@ const FLOAT_CONFIG = {
     tokenomics: "#tokenomics",
     community: "#community",
     why: "#why",
-    buy: "https://app.uniswap.org/swap?chain=robinhood&outputCurrency=0x09389508d005f3fd52d5af84dd74be9041e1f78f",
+    buy: "https://pools.fun/token/0x09389508d005f3fd52d5af84dd74be9041e1f78f",
     x: "https://x.com/floatypus"
   },
   images: {
